@@ -16,7 +16,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
@@ -38,7 +37,10 @@ public class RedisLockAutoConfiguration
     /** Redis Lock 专用的、用于执行 Lua 脚本的 ReactiveRedisTemplate。*/
     @Bean
     @ConditionalOnBean(
-        name = { "executeLuaScriptReactiveRedisConnectionFactory" }
+        name = {
+            "executeLuaScriptReactiveRedisConnectionFactory",
+            "redisLockObjectMapper"
+        }
     )
     public ReactiveRedisTemplate<String, LuaOperatorResult>
     scriptRedisTemplate(
@@ -66,7 +68,6 @@ public class RedisLockAutoConfiguration
     }
 
     /** Redis Lock 专用的 ObjectMapper。*/
-    @Primary
     @Bean("redisLockObjectMapper")
     public ObjectMapper redisLockObjectMapper()
     {
