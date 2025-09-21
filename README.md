@@ -15,6 +15,18 @@
 
 ## 用法
 
+### 依赖地址
+
+当前该依赖已经发布至 Maven 的中央仓库，可以访问：[Redis_Lock](https://central.sonatype.com/artifact/io.github.jessez332623/redis_lock)，也可以在 pom.xml 中直接配置：
+
+```XML
+<dependency>
+    <groupId>io.github.jessez332623</groupId>
+    <artifactId>redis_lock</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
 ### 上下文配置
 
 本依赖推荐使用 [Lettuce Redis 客户端](https://github.com/redis/lettuce)，Maven 依赖如下：
