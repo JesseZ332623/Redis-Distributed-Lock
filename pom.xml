@@ -8,18 +8,28 @@
 	<version>1.0.0</version>
 	<name>redis_lock</name>
 	<description>基于 Redis 且无缝集成响应式编程的互斥锁和公平信号量实现</description>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
+    <url>https://github.com/JesseZ332623/Redis-Distributed-Lock</url>
+    <licenses>
+        <license>
+            <name>Apache License Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+    <developers>
+        <developer>
+            <name>JesseZ332623</name>
+            <email>zhj3191955858@gmail.com</email>
+        </developer>
+    </developers>
 	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
+        <connection>
+            scm:https://github.com/JesseZ332623/Redis-Distributed-Lock.git
+        </connection>
+        <developerConnection>
+            scm:https://github.com/JesseZ332623/Redis-Distributed-Lock.git
+        </developerConnection>
+        <url>https://github.com/JesseZ332623/Redis-Distributed-Lock</url>
+        <tag>HEAD</tag>
 	</scm>
 
 	<properties>
