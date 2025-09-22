@@ -82,6 +82,7 @@ public class RedisLockAutoConfiguration
         return new LuaScriptReader();
     }
 
+    /** Redis 分布式锁的自动装配方法。*/
     @Bean
     @ConditionalOnMissingBean(DefaultRedisDistributedLockImpl.class)
     public RedisDistributedLock
@@ -94,12 +95,13 @@ public class RedisLockAutoConfiguration
     {
         return new
         DefaultRedisDistributedLockImpl(
-            properties.getDistributedLockProperties().getLockKeyHead(),
+            properties.getDistributedLockProperties().getLockKeyPrefix(),
             luaScriptReader,
             scriptRedisTemplate
         );
     }
 
+    /** Redis 分布式公平信号量自动装配方法。*/
     @Bean
     @ConditionalOnMissingBean(DefaultRedisFairSemaphoreImpl.class)
     public RedisFairSemaphore
@@ -112,6 +114,7 @@ public class RedisLockAutoConfiguration
     {
         return new
         DefaultRedisFairSemaphoreImpl(
+            properties.getFairSemaphoreProperties().getFairSemaphoreKeyPrefix(),
             luaScriptReader,
             scriptRedisTemplate
         );
