@@ -115,7 +115,7 @@ public class ReactiveRedisConfig
 ```
 
 ### 属性配置
-[pom.xml](pom.xml)
+
 ```properties
 # 禁用本依赖（默认开启）
 app.redis-lock.enabled=false
