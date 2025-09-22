@@ -19,11 +19,17 @@
 
 当前该依赖已经发布至 Maven 的中央仓库，可以访问：[Redis_Lock](https://central.sonatype.com/artifact/io.github.jessez332623/redis_lock)，也可以在 pom.xml 中直接配置：
 
+### 📢 重要通知
+
+不要使用 `1.0.0` ~ `1.0.1` 版本，它们是有问题的，具体信息见：[修复文档](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/documents/%E7%89%88%E6%9C%AC%201.0.2%20%E4%BF%AE%E5%A4%8D.md)
+
+---
+
 ```XML
 <dependency>
     <groupId>io.github.jessez332623</groupId>
     <artifactId>redis_lock</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
@@ -46,7 +52,7 @@
 /** 项目 Redis 配置类。*/
 @Configuration
 public class ReactiveRedisConfig
-{
+{[pom.xml](pom.xml)
     @Value("${spring.data.redis.host}")
     private String redisHost;
 
@@ -91,7 +97,7 @@ public class ReactiveRedisConfig
             .commandTimeout(Duration.ofSeconds(15L))  // 命令超时时间
             .shutdownTimeout(Duration.ofSeconds(5L))  // 关闭超时时间
             .build();
-
+[pom.xml](pom.xml)
         // 3. 创建连接工厂
         return new LettuceConnectionFactory(config, clientConfig);
     }
@@ -109,13 +115,16 @@ public class ReactiveRedisConfig
 ```
 
 ### 属性配置
-
+[pom.xml](pom.xml)
 ```properties
 # 禁用本依赖（默认开启）
 app.redis-lock.enabled=false
 
-# 设置分布式锁键的键头为：project-lock（默认为 lock）
-app.redis-lock.distributed-lock.lock-key-head=project-lock
+# 设置分布式锁键的键前缀为：project-lock（默认为 lock）
+app.redis-lock.distributed-lock.lock-key-prefix=project-lock
+
+# 设置分布式公平信号量键的键前缀为：project-semaphore（默认为 semaphore）
+app.redis-lock.fair-semaphore.fair-semaphore-key-prefix=project-semaphore
 ```
 
 ## 代码速览
@@ -135,4 +144,4 @@ app.redis-lock.distributed-lock.lock-key-head=project-lock
 
 ## Latest Update
 
-*2025.09.21*
+*2025.09.22*
