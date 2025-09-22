@@ -52,7 +52,7 @@
 /** 项目 Redis 配置类。*/
 @Configuration
 public class ReactiveRedisConfig
-{[pom.xml](pom.xml)
+{
     @Value("${spring.data.redis.host}")
     private String redisHost;
 
@@ -97,7 +97,7 @@ public class ReactiveRedisConfig
             .commandTimeout(Duration.ofSeconds(15L))  // 命令超时时间
             .shutdownTimeout(Duration.ofSeconds(5L))  // 关闭超时时间
             .build();
-[pom.xml](pom.xml)
+
         // 3. 创建连接工厂
         return new LettuceConnectionFactory(config, clientConfig);
     }
