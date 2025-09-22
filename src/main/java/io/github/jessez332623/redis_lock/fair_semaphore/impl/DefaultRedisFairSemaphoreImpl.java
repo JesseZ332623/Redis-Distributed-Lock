@@ -29,6 +29,9 @@ import static java.lang.String.format;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
 {
+    /** 公平信号量键的键前缀（用户自定义）。*/
+    private String FAIR_SEMAPHORE_KEY_PREFIX;
+
     /** Lua 脚本读取器。*/
     private LuaScriptReader luaScriptReader;
 
@@ -38,26 +41,39 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
 
     /** 公共有参构造函数，满足 Spring 自动装配之需要。*/
     public DefaultRedisFairSemaphoreImpl(
+        String fairSemaphoreKeyPrefix,
         LuaScriptReader scriptReader,
         ReactiveRedisTemplate<String, LuaOperatorResult> redisScriptTemplate
     )
     {
-        this.luaScriptReader     = scriptReader;
-        this.scriptRedisTemplate = redisScriptTemplate;
+        this.FAIR_SEMAPHORE_KEY_PREFIX = fairSemaphoreKeyPrefix;
+        this.luaScriptReader           = scriptReader;
+        this.scriptRedisTemplate       = redisScriptTemplate;
+    }
+
+    /** 组合信号量有序集合键。*/
+    @Contract(pure = true)
+    private @NotNull String
+    getSemaphoreNameKey(String semaphoreName) {
+        return FAIR_SEMAPHORE_KEY_PREFIX + "{" + semaphoreName + "}";
     }
 
     /** 组合信号量拥有者有序集合键。*/
     @Contract(pure = true)
-    private static @NotNull String
-    getSemaphoreOwnerKey(String semaphoreName) {
-        return semaphoreName + ":" + "owner";
+    private @NotNull String
+    getSemaphoreOwnerKey(String semaphoreName)
+    {
+        return
+        FAIR_SEMAPHORE_KEY_PREFIX + "{" + semaphoreName + "}:" + "owner";
     }
 
-    /** 组合信号量计数器数据键。*/
+    /** 组合信号量全局计数器数据键。*/
     @Contract(pure = true)
-    private static @NotNull String
-    getSemaphoreCounterKey(String semaphoreName) {
-        return semaphoreName + ":" + "counter";
+    private @NotNull String
+    getSemaphoreCounterKey(String semaphoreName)
+    {
+        return
+        FAIR_SEMAPHORE_KEY_PREFIX + "{" + semaphoreName + "}:" + "counter";
     }
 
     /**
@@ -72,6 +88,9 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     private @NotNull Mono<String>
     acquireFairSemaphore(String semaphoreName, long limit, long timeout)
     {
+        final String semaphoreNameKey
+            = getSemaphoreNameKey(semaphoreName);
+
         final String semaphoreOwnerKey
             = getSemaphoreOwnerKey(semaphoreName);
 
@@ -88,7 +107,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                 this.scriptRedisTemplate
                     .execute(
                         script,
-                        List.of(semaphoreName, semaphoreOwnerKey, semaphoreCounterKey),
+                        List.of(semaphoreNameKey, semaphoreOwnerKey, semaphoreCounterKey),
                         limit, timeout, identifier)
                     .timeout(Duration.ofSeconds(5L))
                     .next()
@@ -127,12 +146,15 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     private @NotNull Mono<Void>
     refreshFairSemaphore(String semaphoreName, String identifier)
     {
+        final String semaphoreNameKey
+            = getSemaphoreNameKey(semaphoreName);
+
         return
         this.luaScriptReader
             .read(FAIR_SEMAPHORE,"refreshFairSemaphore.lua")
             .flatMap((script) ->
                 this.scriptRedisTemplate
-                    .execute(script, List.of(semaphoreName), identifier)
+                    .execute(script, List.of(semaphoreNameKey), identifier)
                     .timeout(Duration.ofSeconds(3L))
                     .next()
                     .flatMap((result) ->
@@ -172,6 +194,9 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     private @NotNull Mono<Void>
     releaseFairSemaphore(String semaphoreName, String identifier)
     {
+        final String semaphoreNameKey
+            = getSemaphoreNameKey(semaphoreName);
+
         final String semaphoreOwnerKey
             = getSemaphoreOwnerKey(semaphoreName);
 
@@ -182,7 +207,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                 this.scriptRedisTemplate
                     .execute(
                         script,
-                        List.of(semaphoreName, semaphoreOwnerKey),
+                        List.of(semaphoreNameKey, semaphoreOwnerKey),
                         identifier)
                     .timeout(Duration.ofSeconds(3L))
                     .next()
@@ -230,10 +255,13 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
         long limit, long timeout,
         Function<String, Mono<T>> action)
     {
+        final String semaphoreNameKey
+            = getSemaphoreNameKey(semaphoreName);
+
         return
         Mono.defer(() ->
             Mono.usingWhen(
-                this.acquireFairSemaphore(semaphoreName, limit, timeout)
+                this.acquireFairSemaphore(semaphoreNameKey, limit, timeout)
                     .map((identifier) -> identifier),
                 (identifier) -> {
                     Mono<T> actionMono = action.apply(identifier);
@@ -270,7 +298,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                                 .takeUntilOther(
                                     actionMono.ignoreElement().then(Mono.empty()))
                                 .concatMap((ignore) ->
-                                     this.refreshFairSemaphore(semaphoreName, identifier))
+                                     this.refreshFairSemaphore(semaphoreNameKey, identifier))
                                 .then()
                         );
                     }
@@ -278,7 +306,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                     return actionMono;
                 },
                 (identifier) ->
-                    this.releaseFairSemaphore(semaphoreName, identifier)
+                    this.releaseFairSemaphore(semaphoreNameKey, identifier)
             )
         );
     }
