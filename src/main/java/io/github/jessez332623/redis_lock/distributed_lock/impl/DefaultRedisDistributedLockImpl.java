@@ -34,8 +34,8 @@ import static java.lang.String.format;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
 {
-    /** 分布式锁键的键头（用户自定义）。*/
-    private String LOCK_KEY;
+    /** 分布式锁键的键前缀（用户自定义）。*/
+    private String LOCK_KEY_PREFIX;
 
     /** Lua 脚本读取器。*/
     private LuaScriptReader luaScriptReader;
@@ -51,16 +51,16 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
         ReactiveRedisTemplate<String, LuaOperatorResult> scriptRedisTemplate
     )
     {
-        this.LOCK_KEY            = lockKey;
+        this.LOCK_KEY_PREFIX     = lockKey;
         this.luaScriptReader     = luaScriptReader;
         this.scriptRedisTemplate = scriptRedisTemplate;
     }
 
-    /** 组合 Redis 锁键，LOCK_KEY 键头用户可以自定义。*/
+    /** 组合 Redis 锁键，LOCK_KEY 键前缀用户可以自定义。*/
     @Contract(pure = true)
     private @NotNull String
     getRedisLockKey(String keyName) {
-        return LOCK_KEY + ":" + keyName;
+        return LOCK_KEY_PREFIX + ":" + keyName;
     }
 
     /**
