@@ -5,7 +5,7 @@
 
 	<groupId>io.github.jessez332623</groupId>
 	<artifactId>redis_lock</artifactId>
-	<version>1.0.1</version>
+	<version>1.0.2</version>
 	<name>redis_lock</name>
 	<description>基于 Redis 且无缝集成响应式编程的互斥锁和公平信号量实现</description>
     <url>https://github.com/JesseZ332623/Redis-Distributed-Lock</url>
