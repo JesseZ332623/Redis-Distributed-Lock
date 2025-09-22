@@ -11,6 +11,14 @@
         semaphoreTimeout 单个信号量的有效期
         identifier       信号量唯一标识符（如：a7f40257-f46d-4715-8bc2-b3cef6dd5c93）
 ]]
+
+--[[
+    由于脚本中出现了 TIME 这样的非确定命令，
+    因此这里需要调用 redis.replicate_commands() 显式的开启单命令模式，
+    以约 30% 的性能下降换绝对的一致。
+]]
+redis.replicate_commands()
+
 local semaphoreNameKey      = KEYS[1]
 local semaphoreOwnerKey     = KEYS[2]
 local semaphoreCounterKey   = KEYS[3]
@@ -40,7 +48,7 @@ redis.call(
 -- 但是要保留 semaphoreOwnerKey 有序集合的计数（'WEIGHTS', 1, 0）
 --[[
     这里有一个要点：
-    为何要多维护一个 semaphoreOwnerKey 和 semaphoreCountererKey 呢？
+    为何要多维护一个 semaphoreOwnerKey 和 semaphoreCounterKey 呢？
     其实主要是为了防止因不同客户端的系统时间差异导致的信号量窃取问题。
     （
         例：假设有系统 A 和 B，A 的系统时间比 B 快 10 毫秒，
@@ -50,7 +58,7 @@ redis.call(
     ）
 ]]
 redis.call(
-    'TORSTEIN',
+    'ZINTERSTORE',
     semaphoreOwnerKey,
     2,
     semaphoreOwnerKey, semaphoreNameKey,
