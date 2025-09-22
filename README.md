@@ -23,7 +23,7 @@
 <dependency>
     <groupId>io.github.jessez332623</groupId>
     <artifactId>redis_lock</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 </dependency>
 ```
 
