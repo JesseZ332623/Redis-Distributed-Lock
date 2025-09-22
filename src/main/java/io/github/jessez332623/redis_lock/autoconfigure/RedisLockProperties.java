@@ -16,7 +16,7 @@ public class RedisLockProperties
     private DistributedLock distributedLockProperties
         = new DistributedLock();
 
-    /** Redis 公平信号量相关属性配置（暂无）*/
+    /** Redis 公平信号量相关属性配置 */
     private FairSemaphore fairSemaphoreProperties
         = new FairSemaphore();
 
@@ -24,11 +24,16 @@ public class RedisLockProperties
     @NoArgsConstructor
     public static class DistributedLock
     {
-        /** 分布式锁键的键头（用户自定义，默认为 lock）。*/
-        private String lockKeyHead = "lock";
+        /** 分布式锁键的键前缀（用户自定义，默认为 lock）。*/
+        private String lockKeyPrefix = "lock";
     }
 
     @Data
     @NoArgsConstructor
-    public static class FairSemaphore {}
+    public static class FairSemaphore
+    {
+        /** 公平信号量键的键前缀（用户自定义，默认为 semaphore）。*/
+        private String fairSemaphoreKeyPrefix
+            = "semaphore";
+    }
 }
