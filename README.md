@@ -129,15 +129,16 @@ app.redis-lock.fair-semaphore.fair-semaphore-key-prefix=project-semaphore
 
 ## 代码速览
 
-[Redis 分布式锁默认实现](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/src/main/java/io/github/jessez332623/redis_lock/distributed_lock/impl/DefaultRedisDistributedLockImpl.java)
+- [Redis 分布式锁默认实现](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/src/main/java/io/github/jessez332623/redis_lock/distributed_lock/impl/DefaultRedisDistributedLockImpl.java)
 
-[Redis 分布式锁 Lua 脚本](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/src/main/resources/lua-script/distributed-lock)
+- [Redis 分布式锁 Lua 脚本](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/src/main/resources/lua-script/distributed-lock)
 
-[Redis 分布式公平信号量默认实现](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/src/main/java/io/github/jessez332623/redis_lock/fair_semaphore/impl/DefaultRedisFairSemaphoreImpl.java)
+- [Redis 分布式公平信号量默认实现](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/src/main/java/io/github/jessez332623/redis_lock/fair_semaphore/impl/DefaultRedisFairSemaphoreImpl.java)
 
-[Redis 分布式公平信号量 Lua 脚本](https://github.com/JesseZ332623/Redis-Distributed-Lock/tree/main/src/main/resources/lua-script/fair-semaphore)
+- [Redis 分布式公平信号量 Lua 脚本](https://github.com/JesseZ332623/Redis-Distributed-Lock/tree/main/src/main/resources/lua-script/fair-semaphore)
 
-[Lua 脚本读取器](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/src/main/java/io/github/jessez332623/redis_lock/utils/LuaScriptReader.java)
+- [Lua 脚本读取器](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/src/main/java/io/github/jessez332623/redis_lock/utils/LuaScriptReader.java)
+
 ## LICENCE
 
 [Apache License Version 2.0](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/LICENSE)
