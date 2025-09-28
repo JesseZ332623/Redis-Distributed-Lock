@@ -21,7 +21,10 @@
 
 ### 📢 重要通知
 
-不要使用 `1.0.0` ~ `1.0.1` 版本，它们是有问题的，具体信息见：[修复文档](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/documents/%E7%89%88%E6%9C%AC%201.0.2%20%E4%BF%AE%E5%A4%8D.md)
+不要使用 `1.0.0` ~ `1.0.2` 版本，它们是有问题的，具体信息见：
+
+- [修复文档-1.0.2 分布式公平信号量键在 Redis 集群中的适配](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/documents/%E7%89%88%E6%9C%AC%201.0.2%20%E4%BF%AE%E5%A4%8D.md)
+- [修复文档-1.0.5 模块化迁移，以及更简易、更安全的上下文配置](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/documents/%E7%89%88%E6%9C%AC%201.0.5%20%E4%BF%AE%E5%A4%8D.md)
 
 ---
 
@@ -29,7 +32,7 @@
 <dependency>
     <groupId>io.github.jessez332623</groupId>
     <artifactId>redis_lock</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.5</version>
 </dependency>
 ```
 
@@ -45,8 +48,8 @@
 </dependency>
 ```
 
-此外，在使用本依赖的项目上必须准备一个名为 `executeLuaScriptReactiveRedisConnectionFactory`
-的 `ReactiveRedisConnectionFactory`，我在下文给出一个示例：
+此外，在使用本依赖的项目上必须准备一个 `ReactiveRedisConnectionFactory`，
+我在下文给出一个示例：
 
 ```java
 /** 项目 Redis 配置类。*/
@@ -101,16 +104,6 @@ public class ReactiveRedisConfig
         // 3. 创建连接工厂
         return new LettuceConnectionFactory(config, clientConfig);
     }
-    
-    /** 此处复用 reactiveRedisConnectionFactory 即可。*/
-    @Bean
-    public ReactiveRedisConnectionFactory
-    executeLuaScriptReactiveRedisConnectionFactory(
-        @Qualifier("reactiveRedisConnectionFactory")
-        ReactiveRedisConnectionFactory reactiveRedisConnectionFactory)
-    {
-        return reactiveRedisConnectionFactory;
-    }
 }
 ```
 
@@ -121,10 +114,10 @@ public class ReactiveRedisConfig
 app.redis-lock.enabled=false
 
 # 设置分布式锁键的键前缀为：project-lock（默认为 lock）
-app.redis-lock.distributed-lock.lock-key-prefix=project-lock
+app.redis-lock.distributed-lock.key-prefix=project-lock
 
 # 设置分布式公平信号量键的键前缀为：project-semaphore（默认为 semaphore）
-app.redis-lock.fair-semaphore.fair-semaphore-key-prefix=project-semaphore
+app.redis-lock.fair-semaphore.key-prefix=project-semaphore
 ```
 
 ## 代码速览
@@ -145,4 +138,4 @@ app.redis-lock.fair-semaphore.fair-semaphore-key-prefix=project-semaphore
 
 ## Latest Update
 
-*2025.09.22*
+*2025.09.28*
