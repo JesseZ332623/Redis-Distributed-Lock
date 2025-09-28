@@ -23,7 +23,7 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-/** Redis Lock Spring 自动配置类。*/
+/** Redis-Lock Spring 自动配置类。*/
 @Slf4j
 @Configuration
 @ConditionalOnProperty(
@@ -51,7 +51,7 @@ public class RedisLockAutoConfiguration
     /**
      * Redis-Lock 依赖专用的、用于执行 Lua 脚本的 ReactiveRedisTemplate。
      * 使用者需要在自己项目中配置一个正确的、实现了 {@link ReactiveRedisConnectionFactory} 实例，
-     * 反之本依赖的所有 Bean 会在应用程序启动时创建失败
+     * 反之本依赖的所有 Bean 会在应用程序启动时创建失败。
      *
      * @see <a href="https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/README.md">配置 Lettuce 客户端的连接工厂</a>
      */
