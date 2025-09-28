@@ -5,7 +5,7 @@
 
 	<groupId>io.github.jessez332623</groupId>
 	<artifactId>redis_lock</artifactId>
-	<version>1.0.2</version>
+	<version>1.0.5</version>
 	<name>redis_lock</name>
 	<description>基于 Redis 且无缝集成响应式编程的互斥锁和公平信号量实现</description>
     <url>https://github.com/JesseZ332623/Redis-Distributed-Lock</url>
@@ -36,6 +36,7 @@
 		<java.version>21</java.version>
         <spring-boot.version>3.5.3</spring-boot.version>
         <lombok.version>1.18.36</lombok.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 
     <dependencyManagement>
@@ -124,6 +125,7 @@
                 <artifactId>maven-gpg-plugin</artifactId>
                 <version>3.2.7</version>
                 <configuration>
+                    <!--suppress UnresolvedMavenProperty -->
                     <passphrase>${env.GPG_PASSPHRASE}</passphrase>
                 </configuration>
                 <executions>
@@ -169,6 +171,10 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <compilerArgs>
+                        <arg>--module-version</arg>
+                        <arg>${project.version}</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
