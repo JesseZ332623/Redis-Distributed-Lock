@@ -13,27 +13,26 @@ public class RedisLockProperties
     private boolean enabled = true;
 
     /** Redis 分布式锁相关属性配置 */
-    private DistributedLock distributedLockProperties
-        = new DistributedLock();
+    private DistributedLockProperties distributedLock
+        = new DistributedLockProperties();
 
     /** Redis 公平信号量相关属性配置 */
-    private FairSemaphore fairSemaphoreProperties
-        = new FairSemaphore();
+    private FairSemaphoreProperties fairSemaphore
+        = new FairSemaphoreProperties();
 
     @Data
     @NoArgsConstructor
-    public static class DistributedLock
+    public static class DistributedLockProperties
     {
         /** 分布式锁键的键前缀（用户自定义，默认为 lock）。*/
-        private String lockKeyPrefix = "lock";
+        private String keyPrefix = "lock";
     }
 
     @Data
     @NoArgsConstructor
-    public static class FairSemaphore
+    public static class FairSemaphoreProperties
     {
         /** 公平信号量键的键前缀（用户自定义，默认为 semaphore）。*/
-        private String fairSemaphoreKeyPrefix
-            = "semaphore";
+        private String keyPrefix = "semaphore";
     }
 }
