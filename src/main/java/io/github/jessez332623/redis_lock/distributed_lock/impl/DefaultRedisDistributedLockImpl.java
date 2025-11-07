@@ -13,6 +13,7 @@ import org.jetbrains.annotations.NotNull;
 import org.reactivestreams.Publisher;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 
 import java.util.List;
 import java.util.UUID;
@@ -32,7 +33,7 @@ import static java.lang.String.format;
  */
 @Slf4j
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
-public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
+public final class DefaultRedisDistributedLockImpl implements RedisDistributedLock
 {
     /** 分布式锁键的键前缀（用户自定义）。*/
     private String LOCK_KEY_PREFIX;
@@ -44,16 +45,21 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
     private
     ReactiveRedisTemplate<String, LuaOperatorResult> scriptRedisTemplate;
 
+    /** Redis Lock 专用的线程调度器。*/
+    private Scheduler scheduler;
+
     /** 公共有参构造函数，满足 Spring 自动装配之需要。*/
     public DefaultRedisDistributedLockImpl(
         String lockKey,
         LuaScriptReader luaScriptReader,
-        ReactiveRedisTemplate<String, LuaOperatorResult> scriptRedisTemplate
+        ReactiveRedisTemplate<String, LuaOperatorResult> scriptRedisTemplate,
+        Scheduler scheduler
     )
     {
         this.LOCK_KEY_PREFIX     = lockKey;
         this.luaScriptReader     = luaScriptReader;
         this.scriptRedisTemplate = scriptRedisTemplate;
+        this.scheduler           = scheduler;
     }
 
     /** 组合 Redis 锁键，LOCK_KEY 键前缀用户可以自定义。*/
@@ -89,6 +95,7 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
                         List.of(lockKeyName),
                         identifier, acquireTimeout, lockTimeout)
                     .next()
+                    .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
@@ -102,10 +109,7 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
                                     )
                                 );
 
-                            case "SUCCESS" -> {
-                                log.info("Lock obtain success!");
-                                yield Mono.just(identifier);
-                            }
+                            case "SUCCESS" -> Mono.just(identifier);
 
                             case null, default ->
                                 Mono.error(
@@ -115,7 +119,7 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
                                 );
                         }
                     )
-            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandel);
+            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandle);
     }
 
     /**
@@ -135,6 +139,7 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
                 this.scriptRedisTemplate
                     .execute(script, List.of(lockKeyName), identifier)
                     .next()
+                    .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
@@ -153,10 +158,7 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
                                 yield Mono.empty();
                             }
 
-                            case "SUCCESS" -> {
-                                log.info("Lock release success!");
-                                yield Mono.empty();
-                            }
+                            case "SUCCESS" -> Mono.empty();
 
                             case null, default ->
                                 Mono.error(
@@ -166,7 +168,7 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
                                 );
                         }
                     )
-            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandel).then();
+            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandle).then();
     }
 
     /**
@@ -197,8 +199,7 @@ public class DefaultRedisDistributedLockImpl implements RedisDistributedLock
         return
         Mono.defer(() ->
             Mono.usingWhen(
-                this.acquireLockTimeout(lockName, acquireTimeout, lockTimeout)
-                    .map(acquiredId -> acquiredId),
+                this.acquireLockTimeout(lockName, acquireTimeout, lockTimeout),
                 action,
                 (acquiredId) ->
                     this.releaseLock(lockName, acquiredId)
