@@ -9,6 +9,7 @@ import io.github.jessez332623.redis_lock.fair_semaphore.impl.DefaultRedisFairSem
 import io.github.jessez332623.redis_lock.utils.LuaOperatorResult;
 import io.github.jessez332623.redis_lock.utils.LuaScriptReader;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -22,6 +23,8 @@ import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 /** Redis-Lock Spring 自动配置类。*/
 @Slf4j
@@ -46,6 +49,24 @@ public class RedisLockAutoConfiguration
     {
         log.info("Initializing LuaScriptReader for Redis Lock.");
         return new LuaScriptReader();
+    }
+
+    /** Redis Lock 专用的线程调度器 Bean。*/
+    @Bean(name = "distributedLockScheduler")
+    public Scheduler
+    distributedLockScheduler(RedisLockProperties properties)
+    {
+        RedisLockProperties.ProjectSchedulersProperties
+            schedulersProperties = properties.getSchedulers();
+
+        return
+        Schedulers.newBoundedElastic(
+            schedulersProperties.getMaxThreads(),
+            schedulersProperties.getTaskQueueCapacity(),
+            schedulersProperties.getThreadName(),
+            schedulersProperties.getTtlSeconds(),
+            schedulersProperties.isDaemon()
+        );
     }
 
     /**
@@ -105,7 +126,8 @@ public class RedisLockAutoConfiguration
     redisDistributedLock(
         RedisLockProperties properties,
         ReactiveRedisTemplate<String, LuaOperatorResult> redisLockScriptTemplate,
-        LuaScriptReader luaScriptReader
+        LuaScriptReader luaScriptReader,
+        @Qualifier("distributedLockScheduler") Scheduler scheduler
     )
     {
         log.info("Init instance of DefaultRedisDistributedLockImpl.");
@@ -114,7 +136,8 @@ public class RedisLockAutoConfiguration
         DefaultRedisDistributedLockImpl(
             properties.getDistributedLock().getKeyPrefix(),
             luaScriptReader,
-            redisLockScriptTemplate
+            redisLockScriptTemplate,
+            scheduler
         );
     }
 
@@ -125,7 +148,8 @@ public class RedisLockAutoConfiguration
     redisFairSemaphore(
         RedisLockProperties properties,
         ReactiveRedisTemplate<String, LuaOperatorResult> redisLockScriptTemplate,
-        LuaScriptReader luaScriptReader
+        LuaScriptReader luaScriptReader,
+        @Qualifier("distributedLockScheduler") Scheduler scheduler
     )
     {
         log.info("Init instance of DefaultRedisFairSemaphoreImpl.");
@@ -134,7 +158,8 @@ public class RedisLockAutoConfiguration
         DefaultRedisFairSemaphoreImpl(
             properties.getFairSemaphore().getKeyPrefix(),
             luaScriptReader,
-            redisLockScriptTemplate
+            redisLockScriptTemplate,
+            scheduler
         );
     }
 }

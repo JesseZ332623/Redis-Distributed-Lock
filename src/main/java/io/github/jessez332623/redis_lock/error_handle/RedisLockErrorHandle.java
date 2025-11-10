@@ -1,7 +1,6 @@
 package io.github.jessez332623.redis_lock.error_handle;
 
 import io.github.jessez332623.redis_lock.utils.exception.LuaScriptOperatorFailed;
-// import io.lettuce.core.RedisCommandTimeoutException;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +27,7 @@ final public class RedisLockErrorHandle
      * @return 发布异常或者默认值的 Mono
      */
     public static <T> @NotNull Mono<T>
-    redisLockGenericErrorHandel(@NotNull Throwable exception)
+    redisLockGenericErrorHandle(@NotNull Throwable exception)
     {
         if (isLettuceTimeoutException(exception)) {
             return Mono.error(exception);

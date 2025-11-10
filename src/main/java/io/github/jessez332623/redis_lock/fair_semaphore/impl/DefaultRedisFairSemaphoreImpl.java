@@ -15,6 +15,7 @@ import org.reactivestreams.Publisher;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 
 import java.time.Duration;
 import java.util.List;
@@ -39,16 +40,21 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     private
     ReactiveRedisTemplate<String, LuaOperatorResult> scriptRedisTemplate;
 
+    /** Redis Lock 专用的线程调度器。*/
+    private Scheduler scheduler;
+
     /** 公共有参构造函数，满足 Spring 自动装配之需要。*/
     public DefaultRedisFairSemaphoreImpl(
         String fairSemaphoreKeyPrefix,
         LuaScriptReader scriptReader,
-        ReactiveRedisTemplate<String, LuaOperatorResult> redisScriptTemplate
+        ReactiveRedisTemplate<String, LuaOperatorResult> redisScriptTemplate,
+        Scheduler scheduler
     )
     {
         this.FAIR_SEMAPHORE_KEY_PREFIX = fairSemaphoreKeyPrefix;
         this.luaScriptReader           = scriptReader;
         this.scriptRedisTemplate       = redisScriptTemplate;
+        this.scheduler                 = scheduler;
     }
 
     /** 组合信号量有序集合键。*/
@@ -111,6 +117,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                         limit, timeout, identifier)
                     .timeout(Duration.ofSeconds(5L))
                     .next()
+                    .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
@@ -132,7 +139,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                                 );
                         }
                     )
-            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandel);
+            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandle);
     }
 
     /**
@@ -157,6 +164,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                     .execute(script, List.of(semaphoreNameKey), identifier)
                     .timeout(Duration.ofSeconds(3L))
                     .next()
+                    .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
@@ -180,7 +188,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                                 );
                             }
                         )
-            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandel).then();
+            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandle).then();
     }
 
     /**
@@ -211,6 +219,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                         identifier)
                     .timeout(Duration.ofSeconds(3L))
                     .next()
+                    .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
@@ -231,7 +240,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                                 );
                         }
                     )
-            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandel).then();
+            ).onErrorResume(RedisLockErrorHandle::redisLockGenericErrorHandle).then();
     }
 
     /**
@@ -255,8 +264,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
         long limit, long timeout,
         Function<String, Mono<T>> action)
     {
-        final String semaphoreNameKey
-            = getSemaphoreNameKey(semaphoreName);
+        final String semaphoreNameKey = getSemaphoreNameKey(semaphoreName);
 
         return
         Mono.defer(() ->

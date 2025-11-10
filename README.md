@@ -9,7 +9,7 @@
 <dependency>
     <groupId>org.redisson</groupId>
     <artifactId>redisson</artifactId>
-    <version>3.51.0</version> <!-- 当前最新版本 -->
+    <version>3.52.0</version> <!-- 当前最新版本 -->
 </dependency>
 ```
 
@@ -19,22 +19,22 @@
 
 当前该依赖已经发布至 Maven 的中央仓库，可以访问：[Redis_Lock](https://central.sonatype.com/artifact/io.github.jessez332623/redis_lock)，也可以在 pom.xml 中直接配置：
 
-### 📢 重要通知
-
-不要使用 `1.0.0` ~ `1.0.2` 版本，它们是有问题的，具体信息见：
-
-- [修复文档-1.0.2 分布式公平信号量键在 Redis 集群中的适配](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/documents/%E7%89%88%E6%9C%AC%201.0.2%20%E4%BF%AE%E5%A4%8D.md)
-- [修复文档-1.0.5 模块化迁移，以及更简易、更安全的上下文配置](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/documents/%E7%89%88%E6%9C%AC%201.0.5%20%E4%BF%AE%E5%A4%8D.md)
-
----
-
 ```XML
 <dependency>
     <groupId>io.github.jessez332623</groupId>
     <artifactId>redis_lock</artifactId>
-    <version>1.0.5</version>
+    <version>1.0.6</version>
 </dependency>
 ```
+
+### 📢 重要通知
+
+不要使用 `1.0.0` ~ `1.0.5` 版本，它们是有问题或者性能不佳的，具体信息见：
+
+- [修复文档-1.0.2 分布式公平信号量键在 Redis 集群中的适配](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/documents/%E7%89%88%E6%9C%AC%201.0.2%20%E4%BF%AE%E5%A4%8D.md)
+- [修复文档-1.0.5 模块化迁移，以及更简易、更安全的上下文配置](https://github.com/JesseZ332623/Redis-Distributed-Lock/blob/main/documents/%E7%89%88%E6%9C%AC%201.0.5%20%E4%BF%AE%E5%A4%8D.md)
+- [更新文档-1.0.6 Lua 脚本缓存策略，以及为所有锁操作配置统一的调度器]()
+---
 
 ### 上下文配置
 
@@ -109,15 +109,31 @@ public class ReactiveRedisConfig
 
 ### 属性配置
 
-```properties
-# 禁用本依赖（默认开启）
-app.redis-lock.enabled=false
+```yml
+app:
+  redis-lock:
+    # 是否禁用本依赖（默认开启）
+    enable: true
 
-# 设置分布式锁键的键前缀为：project-lock（默认为 lock）
-app.redis-lock.distributed-lock.key-prefix=project-lock
-
-# 设置分布式公平信号量键的键前缀为：project-semaphore（默认为 semaphore）
-app.redis-lock.fair-semaphore.key-prefix=project-semaphore
+    schedulers:
+      # 最大线程数（默认 100 线程）
+      max-threads: 100
+      # 任务队列容量（默认 1000）
+      task-queue-capacity: 1000
+      # 调度线程名（默认 redis-lock）
+      thread-name: redis-lock
+      # 空闲线程存活时间（默认 60 秒）
+      ttl-seconds: 60
+      # 是否开启守护线程？（对于分布式锁操作来说是必须的）
+      daemon: true
+    
+    distributed-lock:
+      # 设置分布式锁键的键前缀为：project-lock（默认为 lock）
+      key-prefix: project-lock
+      
+    fair-semaphore:
+      # 设置分布式公平信号量键的键前缀为：project-semaphore（默认为 semaphore）
+      key-prefix: project-semaphore
 ```
 
 ## 代码速览
@@ -138,4 +154,4 @@ app.redis-lock.fair-semaphore.key-prefix=project-semaphore
 
 ## Latest Update
 
-*2025.09.28*
+*2025.11.10*
