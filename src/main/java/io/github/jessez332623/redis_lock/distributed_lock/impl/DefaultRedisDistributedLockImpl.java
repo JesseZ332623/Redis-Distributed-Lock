@@ -15,6 +15,7 @@ import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -48,18 +49,23 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
     /** Redis Lock 专用的线程调度器。*/
     private Scheduler scheduler;
 
+    /** Redis 操作的统一超时时间（默认为 5 秒）。*/
+    private Duration operatorTimeout;
+
     /** 公共有参构造函数，满足 Spring 自动装配之需要。*/
     public DefaultRedisDistributedLockImpl(
         String lockKey,
         LuaScriptReader luaScriptReader,
         ReactiveRedisTemplate<String, LuaOperatorResult> scriptRedisTemplate,
-        Scheduler scheduler
+        Scheduler scheduler,
+        Duration operatorTimeout
     )
     {
         this.LOCK_KEY_PREFIX     = lockKey;
         this.luaScriptReader     = luaScriptReader;
         this.scriptRedisTemplate = scriptRedisTemplate;
         this.scheduler           = scheduler;
+        this.operatorTimeout     = operatorTimeout;
     }
 
     /** 组合 Redis 锁键，LOCK_KEY 键前缀用户可以自定义。*/
@@ -73,8 +79,8 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
      * 尝试获取一个锁。
      *
      * @param lockName          锁名
-     * @param acquireTimeout    获取锁的时间期限
-     * @param lockTimeout       锁本身的有效期（单位：秒）
+     * @param acquireTimeout    获取锁的时间期限（毫秒级）
+     * @param lockTimeout       锁本身的有效期（毫秒级）
      *
      * @return 返回一个 Mono，成功获取锁时发布锁的唯一标识符（UUID）
      */
@@ -94,6 +100,7 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
                         script,
                         List.of(lockKeyName),
                         identifier, acquireTimeout, lockTimeout)
+                    .timeout(this.operatorTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
@@ -138,6 +145,7 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
             .flatMap((script) ->
                 this.scriptRedisTemplate
                     .execute(script, List.of(lockKeyName), identifier)
+                    .timeout(this.operatorTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
@@ -189,7 +197,7 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
     public <T> Mono<T>
     withLock(
         String lockName,
-        long acquireTimeout, long lockTimeout,
+        Duration acquireTimeout, Duration lockTimeout,
         Function<String, Mono<T>> action)
     {
         /*
@@ -199,7 +207,11 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
         return
         Mono.defer(() ->
             Mono.usingWhen(
-                this.acquireLockTimeout(lockName, acquireTimeout, lockTimeout),
+                this.acquireLockTimeout(
+                    lockName,
+                    acquireTimeout.toMillis(),
+                    lockTimeout.toMillis()
+                ),
                 action,
                 (acquiredId) ->
                     this.releaseLock(lockName, acquiredId)
