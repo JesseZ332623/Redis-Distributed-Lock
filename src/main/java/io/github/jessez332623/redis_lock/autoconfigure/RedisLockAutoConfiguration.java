@@ -45,9 +45,7 @@ public class RedisLockAutoConfiguration
     /** Redis Lock 专用的 Lua 脚本读取器 Bean。*/
     @Bean
     public LuaScriptReader
-    luaScriptReader()
-    {
-        log.info("Initializing LuaScriptReader for Redis Lock.");
+    luaScriptReader() {
         return new LuaScriptReader();
     }
 
@@ -84,8 +82,6 @@ public class RedisLockAutoConfiguration
     {
         try
         {
-            log.info("Initializing RedisLockScriptTemplate.");
-
             RedisSerializer<String> keySerializer = new StringRedisSerializer();
 
             Jackson2JsonRedisSerializer<LuaOperatorResult> valueSerializer
@@ -130,14 +126,13 @@ public class RedisLockAutoConfiguration
         @Qualifier("distributedLockScheduler") Scheduler scheduler
     )
     {
-        log.info("Init instance of DefaultRedisDistributedLockImpl.");
-
         return new
         DefaultRedisDistributedLockImpl(
             properties.getDistributedLock().getKeyPrefix(),
             luaScriptReader,
             redisLockScriptTemplate,
-            scheduler
+            scheduler,
+            properties.getOperationTimeout()
         );
     }
 
@@ -152,14 +147,13 @@ public class RedisLockAutoConfiguration
         @Qualifier("distributedLockScheduler") Scheduler scheduler
     )
     {
-        log.info("Init instance of DefaultRedisFairSemaphoreImpl.");
-
         return new
         DefaultRedisFairSemaphoreImpl(
             properties.getFairSemaphore().getKeyPrefix(),
             luaScriptReader,
             redisLockScriptTemplate,
-            scheduler
+            scheduler,
+            properties.getOperationTimeout()
         );
     }
 }
