@@ -4,6 +4,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+
 /** Spring 依赖自动配置属性类。*/
 @Data
 @ConfigurationProperties(prefix = "app.redis-lock")
@@ -11,6 +13,9 @@ public class RedisLockProperties
 {
     /** 是否启用本依赖？（默认启用）*/
     private boolean enabled = true;
+
+    /** Redis 操作的统一超时时间（默认为 5 秒）。*/
+    private Duration operationTimeout = Duration.ofSeconds(5L);
 
     /** 项目 I/O 密集型操作通用调度器相关属性配置。*/
     private ProjectSchedulersProperties schedulers
