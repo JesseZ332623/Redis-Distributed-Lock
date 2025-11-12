@@ -25,11 +25,15 @@ import java.util.function.Function;
 import static io.github.jessez332623.redis_lock.utils.LuaScriptOperatorType.FAIR_SEMAPHORE;
 import static java.lang.String.format;
 
-/** Redis 公平信号量默认实现。*/
+/** Redis 公平信号量默认实现类。*/
 @Slf4j
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
 {
+    /** 表示一个长时间持有信号量的时间段，现在是 10 秒。*/
+    private final static
+    Duration LONG_TIMEOUT = Duration.ofSeconds(10);
+
     /** 公平信号量键的键前缀（用户自定义）。*/
     private String FAIR_SEMAPHORE_KEY_PREFIX;
 
@@ -43,18 +47,23 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     /** Redis Lock 专用的线程调度器。*/
     private Scheduler scheduler;
 
+    /** Redis 操作的统一超时时间（默认为 5 秒）。*/
+    private Duration operationTimeout;
+
     /** 公共有参构造函数，满足 Spring 自动装配之需要。*/
     public DefaultRedisFairSemaphoreImpl(
         String fairSemaphoreKeyPrefix,
         LuaScriptReader scriptReader,
         ReactiveRedisTemplate<String, LuaOperatorResult> redisScriptTemplate,
-        Scheduler scheduler
+        Scheduler scheduler,
+        Duration operationTimeout
     )
     {
         this.FAIR_SEMAPHORE_KEY_PREFIX = fairSemaphoreKeyPrefix;
         this.luaScriptReader           = scriptReader;
         this.scriptRedisTemplate       = redisScriptTemplate;
         this.scheduler                 = scheduler;
+        this.operationTimeout          = operationTimeout;
     }
 
     /** 组合信号量有序集合键。*/
@@ -94,6 +103,23 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     private @NotNull Mono<String>
     acquireFairSemaphore(String semaphoreName, long limit, long timeout)
     {
+        /*
+         * 必须确保最大信号量值和信号量有效期为正，
+         * 否则 Lua 脚本会执行错误。
+         */
+        if (limit <= 0 || timeout <= 0)
+        {
+            return
+            Mono.error(
+                new IllegalArgumentException(
+                    format(
+                        "Limit or time out must be positive! (limit = %d, timeout = %d)",
+                        limit, timeout
+                    )
+                )
+            );
+        }
+
         final String semaphoreNameKey
             = getSemaphoreNameKey(semaphoreName);
 
@@ -115,7 +141,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                         script,
                         List.of(semaphoreNameKey, semaphoreOwnerKey, semaphoreCounterKey),
                         limit, timeout, identifier)
-                    .timeout(Duration.ofSeconds(5L))
+                    .timeout(this.operationTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
@@ -162,7 +188,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
             .flatMap((script) ->
                 this.scriptRedisTemplate
                     .execute(script, List.of(semaphoreNameKey), identifier)
-                    .timeout(Duration.ofSeconds(3L))
+                    .timeout(this.operationTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
@@ -217,7 +243,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                         script,
                         List.of(semaphoreNameKey, semaphoreOwnerKey),
                         identifier)
-                    .timeout(Duration.ofSeconds(3L))
+                    .timeout(this.operationTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
@@ -250,9 +276,9 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
      *
      * @param <T> 在信号量作用域中业务逻辑返回的类型
      *
-     * @param semaphoreName 信号量键名（例 semaphore:remote）
+     * @param semaphoreName 信号量键名
      * @param limit         最大信号量值
-     * @param timeout       信号量有效期（单位：秒）
+     * @param timeout       信号量有效期（毫秒级）
      * @param action        业务逻辑
      *
      * @return 发布业务逻辑执行结果数据的 Mono
@@ -261,25 +287,28 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     public <T> Mono<T>
     withFairSemaphore(
         String semaphoreName,
-        long limit, long timeout,
-        Function<String, Mono<T>> action)
+        long limit, Duration timeout,
+        Function<String, Mono<T>> action
+    )
     {
-        final String semaphoreNameKey = getSemaphoreNameKey(semaphoreName);
+        final String semaphoreNameKey    = getSemaphoreNameKey(semaphoreName);
+        final long   milliSecondsTimeout = timeout.toMillis();
 
         return
         Mono.defer(() ->
             Mono.usingWhen(
-                this.acquireFairSemaphore(semaphoreNameKey, limit, timeout)
+                this.acquireFairSemaphore(semaphoreNameKey, limit, milliSecondsTimeout)
                     .map((identifier) -> identifier),
                 (identifier) -> {
                     Mono<T> actionMono = action.apply(identifier);
 
                     // 对持有信号量时间较长的进程，才提供刷新功能
-                    if (timeout > 10)
+                    if (timeout.compareTo(LONG_TIMEOUT) > 0)
                     {
                         // 刷新间隔为超时时间的一半
                         Duration refreshInterval
-                            = Duration.ofSeconds(timeout / 2);
+                            = Duration.ofMillis(milliSecondsTimeout)
+                                      .dividedBy(2L);
 
                         /*
                          * 这里出现了几个复杂的响应式流操作，需要做出说明：
@@ -306,8 +335,12 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                                 .takeUntilOther(
                                     actionMono.ignoreElement().then(Mono.empty()))
                                 .concatMap((ignore) ->
-                                     this.refreshFairSemaphore(semaphoreNameKey, identifier))
-                                .then()
+                                     this.refreshFairSemaphore(semaphoreNameKey, identifier)
+                                         .onErrorContinue(  // 刷新信号量操作可能出错，但不能中断整个流
+                                             SemaphoreNotFound.class,
+                                             (exception, object) -> { /* NOTHING TO DO */}
+                                         )
+                                ).then()
                         );
                     }
 
