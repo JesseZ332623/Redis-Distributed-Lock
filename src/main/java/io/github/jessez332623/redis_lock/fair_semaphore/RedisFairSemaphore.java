@@ -1,5 +1,6 @@
 package io.github.jessez332623.redis_lock.fair_semaphore;
 
+import io.github.jessez332623.redis_lock.statistics.StatisticalInstrument;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
@@ -7,7 +8,7 @@ import java.time.Duration;
 import java.util.function.Function;
 
 /** Redis 公平信号量接口。*/
-public interface RedisFairSemaphore
+public interface RedisFairSemaphore extends StatisticalInstrument
 {
     /**
      * 兼容响应式流的 Redis 公平信号量操作，
