@@ -62,7 +62,8 @@ final public class RedisLockErrorHandle
                 log.error("Spring data access failed!", exception);
             }
 
-            default -> {}
+            default ->
+                log.error("{}", exception.getMessage(), exception);
         }
 
         return Mono.error(exception);
