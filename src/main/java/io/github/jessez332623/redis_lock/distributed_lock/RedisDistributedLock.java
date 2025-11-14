@@ -1,5 +1,6 @@
 package io.github.jessez332623.redis_lock.distributed_lock;
 
+import io.github.jessez332623.redis_lock.statistics.StatisticalInstrument;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
@@ -7,7 +8,7 @@ import java.time.Duration;
 import java.util.function.Function;
 
 /** Redis 分布式锁接口类。*/
-public interface RedisDistributedLock
+public interface RedisDistributedLock extends StatisticalInstrument
 {
     /**
      * 兼容响应式流的 Redis 分布式锁操作，
