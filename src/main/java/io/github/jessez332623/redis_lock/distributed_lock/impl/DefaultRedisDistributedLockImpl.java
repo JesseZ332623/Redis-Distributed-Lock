@@ -2,7 +2,9 @@ package io.github.jessez332623.redis_lock.distributed_lock.impl;
 
 import io.github.jessez332623.redis_lock.error_handle.RedisLockErrorHandle;
 import io.github.jessez332623.redis_lock.distributed_lock.RedisDistributedLock;
-import io.github.jessez332623.redis_lock.distributed_lock.exception.RedisDistributedLockAcquireTimeout;
+import io.github.jessez332623.redis_lock.distributed_lock.exception.AcquireLockTimeout;
+import io.github.jessez332623.redis_lock.statistics.StatisticalInstrument;
+import io.github.jessez332623.redis_lock.statistics.impl.DistributedLockFaultStatistical;
 import io.github.jessez332623.redis_lock.utils.LuaOperatorResult;
 import io.github.jessez332623.redis_lock.utils.LuaScriptReader;
 import lombok.AccessLevel;
@@ -52,6 +54,9 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
     /** Redis 操作的统一超时时间（默认为 5 秒）。*/
     private Duration operatorTimeout;
 
+    private final DistributedLockFaultStatistical
+    faultStatistical = new DistributedLockFaultStatistical();
+
     /** 公共有参构造函数，满足 Spring 自动装配之需要。*/
     public DefaultRedisDistributedLockImpl(
         String lockKey,
@@ -72,7 +77,7 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
     @Contract(pure = true)
     private @NotNull String
     getRedisLockKey(String keyName) {
-        return LOCK_KEY_PREFIX + ":" + keyName;
+        return LOCK_KEY_PREFIX + ":" + "{" + keyName + "}";
     }
 
     /**
@@ -106,15 +111,17 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
-                            case "GET_LOCK_TIMEOUT" ->
-                                Mono.error(
-                                    new RedisDistributedLockAcquireTimeout(
+                            case "GET_LOCK_TIMEOUT" -> {
+                                faultStatistical.increaseLockTimeout();
+                                yield Mono.error(
+                                    new AcquireLockTimeout(
                                         format(
                                             "Acquire lock: %s timeout! (acquireTimeout = %d seconds)",
                                             lockName, acquireTimeout
                                         )
                                     )
                                 );
+                            }
 
                             case "SUCCESS" -> Mono.just(identifier);
 
@@ -152,17 +159,21 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
                         switch (result.getResult())
                         {
                             case "LOCK_NOT_EXIST" -> {
-                                log.error("Lock (identifier = {}) not exists!", identifier);
+                                log.warn("Lock (identifier = {}) not exist!", identifier);
+
+                                this.faultStatistical.increaseLockNotExist();
                                 yield Mono.empty();
                             }
 
-                            case "CONCURRENT_DELETE" -> {
+                            case "CONCURRENT_RELEASE" -> {
                                 log.warn("Concurrent delete happened!");
+                                this.faultStatistical.increaseConcurrentRelease();
                                 yield Mono.empty();
                             }
 
                             case "LOCK_OWNED_BY_OTHERS" -> {
-                                log.error("Try to delete others lock!");
+                                log.warn("Try to release others lock!");
+                                this.faultStatistical.increaseReleaseOthers();
                                 yield Mono.empty();
                             }
 
@@ -217,5 +228,29 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
                     this.releaseLock(lockName, acquiredId)
             )
         );
+    }
+
+    /** 获取统计结果字符串。*/
+    @Override
+    public String getStatisticResultString() {
+        return this.faultStatistical.getStatisticResultString();
+    }
+
+    /** 获取统计结果实例。*/
+    @Override
+    public StatisticalInstrument getStatisticResultInstance() {
+        return this.faultStatistical.getStatisticResultInstance();
+    }
+
+    /** 清理统计结果（选择性实现）*/
+    @Override
+    public void cleanStatisticResult() {
+        this.faultStatistical.cleanStatisticResult();
+    }
+
+    /** 输出统计结果（默认由 printf 输出）*/
+    @Override
+    public void displayStatisticResult() {
+        this.faultStatistical.displayStatisticResult();
     }
 }
