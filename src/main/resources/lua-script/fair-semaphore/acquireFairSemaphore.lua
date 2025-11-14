@@ -30,8 +30,7 @@ local identifier       = ARGV[3]
 local function getCurrentMillis()
     local time = redis.call('TIME')
 
-    return tonumber(time[1]) * 1000 +
-           math.floor(tonumber(time[2]) / 1000)
+    return tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
 end
 
 local scoreOfTimestamp = getCurrentMillis()
