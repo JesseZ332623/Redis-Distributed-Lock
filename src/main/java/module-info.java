@@ -32,7 +32,6 @@ module redis_lock
     exports io.github.jessez332623.redis_lock.autoconfigure;
     exports io.github.jessez332623.redis_lock.distributed_lock;
     exports io.github.jessez332623.redis_lock.fair_semaphore;
-    exports io.github.jessez332623.redis_lock.utils;
 
     // 开放包给 Spring 反射
     opens io.github.jessez332623.redis_lock.autoconfigure
