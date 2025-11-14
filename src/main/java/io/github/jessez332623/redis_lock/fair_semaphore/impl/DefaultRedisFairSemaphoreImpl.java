@@ -3,6 +3,7 @@ package io.github.jessez332623.redis_lock.fair_semaphore.impl;
 import io.github.jessez332623.redis_lock.error_handle.RedisLockErrorHandle;
 import io.github.jessez332623.redis_lock.fair_semaphore.exception.AcquireSemaphoreFailed;
 import io.github.jessez332623.redis_lock.fair_semaphore.exception.SemaphoreNotFound;
+import io.github.jessez332623.redis_lock.statistics.impl.FairSemaphoreFaultStatistical;
 import io.github.jessez332623.redis_lock.utils.LuaOperatorResult;
 import io.github.jessez332623.redis_lock.utils.LuaScriptReader;
 import io.github.jessez332623.redis_lock.fair_semaphore.RedisFairSemaphore;
@@ -25,11 +26,15 @@ import java.util.function.Function;
 import static io.github.jessez332623.redis_lock.utils.LuaScriptOperatorType.FAIR_SEMAPHORE;
 import static java.lang.String.format;
 
-/** Redis 公平信号量默认实现。*/
+/** Redis 公平信号量默认实现类。*/
 @Slf4j
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
 {
+    /** 表示一个长时间持有信号量的时间段，现在是 10 秒。*/
+    private final static
+    Duration LONG_TIMEOUT = Duration.ofSeconds(10);
+
     /** 公平信号量键的键前缀（用户自定义）。*/
     private String FAIR_SEMAPHORE_KEY_PREFIX;
 
@@ -43,25 +48,34 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     /** Redis Lock 专用的线程调度器。*/
     private Scheduler scheduler;
 
+    /** Redis 操作的统一超时时间（默认为 5 秒）。*/
+    private Duration operationTimeout;
+
+    private final
+    FairSemaphoreFaultStatistical faultStatistical
+        = new FairSemaphoreFaultStatistical();
+
     /** 公共有参构造函数，满足 Spring 自动装配之需要。*/
     public DefaultRedisFairSemaphoreImpl(
         String fairSemaphoreKeyPrefix,
         LuaScriptReader scriptReader,
         ReactiveRedisTemplate<String, LuaOperatorResult> redisScriptTemplate,
-        Scheduler scheduler
+        Scheduler scheduler,
+        Duration operationTimeout
     )
     {
         this.FAIR_SEMAPHORE_KEY_PREFIX = fairSemaphoreKeyPrefix;
         this.luaScriptReader           = scriptReader;
         this.scriptRedisTemplate       = redisScriptTemplate;
         this.scheduler                 = scheduler;
+        this.operationTimeout          = operationTimeout;
     }
 
     /** 组合信号量有序集合键。*/
     @Contract(pure = true)
     private @NotNull String
     getSemaphoreNameKey(String semaphoreName) {
-        return FAIR_SEMAPHORE_KEY_PREFIX + "{" + semaphoreName + "}";
+        return FAIR_SEMAPHORE_KEY_PREFIX + ":" + "{" + semaphoreName + "}";
     }
 
     /** 组合信号量拥有者有序集合键。*/
@@ -70,7 +84,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     getSemaphoreOwnerKey(String semaphoreName)
     {
         return
-        FAIR_SEMAPHORE_KEY_PREFIX + "{" + semaphoreName + "}:" + "owner";
+        FAIR_SEMAPHORE_KEY_PREFIX + ":" + "{" + semaphoreName + "}:" + "owner";
     }
 
     /** 组合信号量全局计数器数据键。*/
@@ -79,7 +93,7 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     getSemaphoreCounterKey(String semaphoreName)
     {
         return
-        FAIR_SEMAPHORE_KEY_PREFIX + "{" + semaphoreName + "}:" + "counter";
+        FAIR_SEMAPHORE_KEY_PREFIX + ":" + "{" + semaphoreName + "}:" + "counter";
     }
 
     /**
@@ -94,6 +108,23 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     private @NotNull Mono<String>
     acquireFairSemaphore(String semaphoreName, long limit, long timeout)
     {
+        /*
+         * 必须确保最大信号量值和信号量有效期为正，
+         * 否则 Lua 脚本会执行错误。
+         */
+        if (limit <= 0 || timeout <= 0)
+        {
+            return
+            Mono.error(
+                new IllegalArgumentException(
+                    format(
+                        "Limit or time out must be positive! (limit = %d, timeout = %d)",
+                        limit, timeout
+                    )
+                )
+            );
+        }
+
         final String semaphoreNameKey
             = getSemaphoreNameKey(semaphoreName);
 
@@ -115,18 +146,21 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                         script,
                         List.of(semaphoreNameKey, semaphoreOwnerKey, semaphoreCounterKey),
                         limit, timeout, identifier)
-                    .timeout(Duration.ofSeconds(5L))
+                    .timeout(this.operationTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
-                            case "ACQUIRE_SEMAPHORE_FAILED" ->
-                                Mono.error(
+                            case "ACQUIRE_SEMAPHORE_FAILED" -> {
+                                this.faultStatistical.increaseAcquireFailed();
+
+                                yield Mono.error(
                                     new AcquireSemaphoreFailed(
                                         "Acquire semaphore failed! Caused by: The resource is busy."
                                     )
                                 );
+                            }
 
                             case "SUCCESS" ->
                                 Mono.just(identifier);
@@ -162,21 +196,24 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
             .flatMap((script) ->
                 this.scriptRedisTemplate
                     .execute(script, List.of(semaphoreNameKey), identifier)
-                    .timeout(Duration.ofSeconds(3L))
+                    .timeout(this.operationTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
-                            case "SEMAPHORE_NOT_FOUND" ->
-                                Mono.error(
+                            case "SEMAPHORE_NOT_FOUND" -> {
+                                this.faultStatistical.increaseNotFound();
+
+                                yield Mono.error(
                                     new SemaphoreNotFound(
                                         format(
-                                            "Fair semaphore %s not exist in %s",
-                                            identifier, semaphoreName
+                                            "Try refresh fair semaphore %s but not exist in %s",
+                                            identifier, semaphoreNameKey
                                         )
                                     )
                                 );
+                            }
 
                             case "SUCCESS" -> Mono.empty();
 
@@ -217,18 +254,21 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                         script,
                         List.of(semaphoreNameKey, semaphoreOwnerKey),
                         identifier)
-                    .timeout(Duration.ofSeconds(3L))
+                    .timeout(this.operationTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
-                            case "SEMAPHORE_TIMEOUT" ->
-                                Mono.error(
+                            case "SEMAPHORE_TIMEOUT" -> {
+                                this.faultStatistical.increaseTimeout();
+
+                                yield Mono.error(
                                     new SemaphoreNotFound(
-                                        format("Semaphore: %s timeout.", identifier)
+                                        format("Try release Semaphore: %s but timeout.", identifier)
                                     )
                                 );
+                            }
 
                             case "SUCCESS" -> Mono.empty();
 
@@ -250,9 +290,9 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
      *
      * @param <T> 在信号量作用域中业务逻辑返回的类型
      *
-     * @param semaphoreName 信号量键名（例 semaphore:remote）
+     * @param semaphoreName 信号量键名
      * @param limit         最大信号量值
-     * @param timeout       信号量有效期（单位：秒）
+     * @param timeout       信号量有效期（毫秒级）
      * @param action        业务逻辑
      *
      * @return 发布业务逻辑执行结果数据的 Mono
@@ -261,25 +301,26 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
     public <T> Mono<T>
     withFairSemaphore(
         String semaphoreName,
-        long limit, long timeout,
-        Function<String, Mono<T>> action)
+        long limit, Duration timeout,
+        Function<String, Mono<T>> action
+    )
     {
-        final String semaphoreNameKey = getSemaphoreNameKey(semaphoreName);
+        final long   milliSecondsTimeout = timeout.toMillis();
 
         return
         Mono.defer(() ->
             Mono.usingWhen(
-                this.acquireFairSemaphore(semaphoreNameKey, limit, timeout)
-                    .map((identifier) -> identifier),
+                this.acquireFairSemaphore(semaphoreName, limit, milliSecondsTimeout),
                 (identifier) -> {
                     Mono<T> actionMono = action.apply(identifier);
 
                     // 对持有信号量时间较长的进程，才提供刷新功能
-                    if (timeout > 10)
+                    if (timeout.compareTo(LONG_TIMEOUT) > 0)
                     {
                         // 刷新间隔为超时时间的一半
                         Duration refreshInterval
-                            = Duration.ofSeconds(timeout / 2);
+                            = Duration.ofMillis(milliSecondsTimeout)
+                                      .dividedBy(2L);
 
                         /*
                          * 这里出现了几个复杂的响应式流操作，需要做出说明：
@@ -306,16 +347,44 @@ public class DefaultRedisFairSemaphoreImpl implements RedisFairSemaphore
                                 .takeUntilOther(
                                     actionMono.ignoreElement().then(Mono.empty()))
                                 .concatMap((ignore) ->
-                                     this.refreshFairSemaphore(semaphoreNameKey, identifier))
-                                .then()
+                                     this.refreshFairSemaphore(semaphoreName, identifier)
+                                         .onErrorContinue(  // 刷新信号量操作可能出错，但不能中断整个流
+                                             SemaphoreNotFound.class,
+                                             (exception, object) -> { /* NOTHING TO DO */ }
+                                         )
+                                ).then()
                         );
                     }
 
                     return actionMono;
                 },
                 (identifier) ->
-                    this.releaseFairSemaphore(semaphoreNameKey, identifier)
+                    this.releaseFairSemaphore(semaphoreName, identifier)
             )
         );
+    }
+
+    /** 获取统计结果字符串。*/
+    @Override
+    public String getStatisticResultString() {
+        return this.faultStatistical.getStatisticResultString();
+    }
+
+    /** 获取统计结果实例。*/
+    @Override
+    public FairSemaphoreFaultStatistical getStatisticResultInstance() {
+        return this.faultStatistical.getStatisticResultInstance();
+    }
+
+    /** 清理统计结果（选择性实现）*/
+    @Override
+    public void cleanStatisticResult() {
+        this.faultStatistical.cleanStatisticResult();
+    }
+
+    /** 输出统计结果（默认由 printf 输出）*/
+    @Override
+    public void displayStatisticResult() {
+        this.faultStatistical.displayStatisticResult();
     }
 }

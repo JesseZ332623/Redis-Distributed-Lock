@@ -2,7 +2,9 @@ package io.github.jessez332623.redis_lock.distributed_lock.impl;
 
 import io.github.jessez332623.redis_lock.error_handle.RedisLockErrorHandle;
 import io.github.jessez332623.redis_lock.distributed_lock.RedisDistributedLock;
-import io.github.jessez332623.redis_lock.distributed_lock.exception.RedisDistributedLockAcquireTimeout;
+import io.github.jessez332623.redis_lock.distributed_lock.exception.AcquireLockTimeout;
+import io.github.jessez332623.redis_lock.statistics.StatisticalInstrument;
+import io.github.jessez332623.redis_lock.statistics.impl.DistributedLockFaultStatistical;
 import io.github.jessez332623.redis_lock.utils.LuaOperatorResult;
 import io.github.jessez332623.redis_lock.utils.LuaScriptReader;
 import lombok.AccessLevel;
@@ -15,6 +17,7 @@ import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -48,33 +51,41 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
     /** Redis Lock 专用的线程调度器。*/
     private Scheduler scheduler;
 
+    /** Redis 操作的统一超时时间（默认为 5 秒）。*/
+    private Duration operatorTimeout;
+
+    private final DistributedLockFaultStatistical
+    faultStatistical = new DistributedLockFaultStatistical();
+
     /** 公共有参构造函数，满足 Spring 自动装配之需要。*/
     public DefaultRedisDistributedLockImpl(
         String lockKey,
         LuaScriptReader luaScriptReader,
         ReactiveRedisTemplate<String, LuaOperatorResult> scriptRedisTemplate,
-        Scheduler scheduler
+        Scheduler scheduler,
+        Duration operatorTimeout
     )
     {
         this.LOCK_KEY_PREFIX     = lockKey;
         this.luaScriptReader     = luaScriptReader;
         this.scriptRedisTemplate = scriptRedisTemplate;
         this.scheduler           = scheduler;
+        this.operatorTimeout     = operatorTimeout;
     }
 
     /** 组合 Redis 锁键，LOCK_KEY 键前缀用户可以自定义。*/
     @Contract(pure = true)
     private @NotNull String
     getRedisLockKey(String keyName) {
-        return LOCK_KEY_PREFIX + ":" + keyName;
+        return LOCK_KEY_PREFIX + ":" + "{" + keyName + "}";
     }
 
     /**
      * 尝试获取一个锁。
      *
      * @param lockName          锁名
-     * @param acquireTimeout    获取锁的时间期限
-     * @param lockTimeout       锁本身的有效期（单位：秒）
+     * @param acquireTimeout    获取锁的时间期限（毫秒级）
+     * @param lockTimeout       锁本身的有效期（毫秒级）
      *
      * @return 返回一个 Mono，成功获取锁时发布锁的唯一标识符（UUID）
      */
@@ -94,20 +105,23 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
                         script,
                         List.of(lockKeyName),
                         identifier, acquireTimeout, lockTimeout)
+                    .timeout(this.operatorTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
-                            case "GET_LOCK_TIMEOUT" ->
-                                Mono.error(
-                                    new RedisDistributedLockAcquireTimeout(
+                            case "GET_LOCK_TIMEOUT" -> {
+                                faultStatistical.increaseLockTimeout();
+                                yield Mono.error(
+                                    new AcquireLockTimeout(
                                         format(
                                             "Acquire lock: %s timeout! (acquireTimeout = %d seconds)",
                                             lockName, acquireTimeout
                                         )
                                     )
                                 );
+                            }
 
                             case "SUCCESS" -> Mono.just(identifier);
 
@@ -138,23 +152,28 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
             .flatMap((script) ->
                 this.scriptRedisTemplate
                     .execute(script, List.of(lockKeyName), identifier)
+                    .timeout(this.operatorTimeout)
                     .next()
                     .subscribeOn(this.scheduler)
                     .flatMap((result) ->
                         switch (result.getResult())
                         {
                             case "LOCK_NOT_EXIST" -> {
-                                log.error("Lock (identifier = {}) not exists!", identifier);
+                                log.warn("Lock (identifier = {}) not exist!", identifier);
+
+                                this.faultStatistical.increaseLockNotExist();
                                 yield Mono.empty();
                             }
 
-                            case "CONCURRENT_DELETE" -> {
+                            case "CONCURRENT_RELEASE" -> {
                                 log.warn("Concurrent delete happened!");
+                                this.faultStatistical.increaseConcurrentRelease();
                                 yield Mono.empty();
                             }
 
                             case "LOCK_OWNED_BY_OTHERS" -> {
-                                log.error("Try to delete others lock!");
+                                log.warn("Try to release others lock!");
+                                this.faultStatistical.increaseReleaseOthers();
                                 yield Mono.empty();
                             }
 
@@ -189,7 +208,7 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
     public <T> Mono<T>
     withLock(
         String lockName,
-        long acquireTimeout, long lockTimeout,
+        Duration acquireTimeout, Duration lockTimeout,
         Function<String, Mono<T>> action)
     {
         /*
@@ -199,11 +218,39 @@ public final class DefaultRedisDistributedLockImpl implements RedisDistributedLo
         return
         Mono.defer(() ->
             Mono.usingWhen(
-                this.acquireLockTimeout(lockName, acquireTimeout, lockTimeout),
+                this.acquireLockTimeout(
+                    lockName,
+                    acquireTimeout.toMillis(),
+                    lockTimeout.toMillis()
+                ),
                 action,
                 (acquiredId) ->
                     this.releaseLock(lockName, acquiredId)
             )
         );
+    }
+
+    /** 获取统计结果字符串。*/
+    @Override
+    public String getStatisticResultString() {
+        return this.faultStatistical.getStatisticResultString();
+    }
+
+    /** 获取统计结果实例。*/
+    @Override
+    public StatisticalInstrument getStatisticResultInstance() {
+        return this.faultStatistical.getStatisticResultInstance();
+    }
+
+    /** 清理统计结果（选择性实现）*/
+    @Override
+    public void cleanStatisticResult() {
+        this.faultStatistical.cleanStatisticResult();
+    }
+
+    /** 输出统计结果（默认由 printf 输出）*/
+    @Override
+    public void displayStatisticResult() {
+        this.faultStatistical.displayStatisticResult();
     }
 }

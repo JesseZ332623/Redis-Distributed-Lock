@@ -12,12 +12,13 @@ local semaphoreNameKey = KEYS[1]
 
 local identifier = ARGV[1]
 
-local currentTimestamp = redis.call('TIME')
+local function getCurrentMillis()
+    local time = redis.call('TIME')
 
--- 获取当前时间戳，使用小数表示（如：1754897298.269707）
-local scoreOfTimestamp
-    = tonumber(currentTimestamp[1]) +               -- 整数部分
-      tonumber(currentTimestamp[2]) / (1000 * 1000) -- 小数部分（微妙级）
+    return tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+end
+
+local scoreOfTimestamp = getCurrentMillis()
 
 -- 刷新信号量时间，ZADD 使用了以下两个选项：
 -- XX (Only update elements that already exist. Don't add new elements)

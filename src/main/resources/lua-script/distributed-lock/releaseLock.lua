@@ -9,30 +9,14 @@
 ]]
 
 local lockKeyName = KEYS[1]
-
 local identifier  = ARGV[1]
 
--- 获取 Redis 中锁的唯一标识
-local currentIdentifier
-    = redis.call('GET', lockKeyName)
-
--- 验证一下本锁是否存在（虽然不存在的概率很小）
-if not
-    currentIdentifier
-then
-    return '{"result": "LOCK_NOT_EXIST"}'
-end
-
--- 比对一下是不是自己的锁
+-- 获取 Redis 中锁的唯一标识并比较
 if
-    currentIdentifier == identifier
+    redis.call('GET', lockKeyName) == identifier
 then
-    --  删除锁
-    local delRes = redis.call("DEL", lockKeyName)
-
-    if
-        delRes == 1
-    then
+    -- 如果是自己的锁直接返回
+    if redis.call('DEL', lockKeyName) == 1 then
         return '{"result": "SUCCESS"}'
     else
         -- 这里有一个非常罕见的情况：
@@ -40,9 +24,16 @@ then
         -- 则两个客户端都会认为自己是锁的持有者，
         -- 在先后执行 DEL 操作时就会多出一次无意义的删除操作
         -- 无害但是值得记录
-        return '{"result": "CONCURRENT_DELETE"}'
+        return '{"result": "CONCURRENT_RELEASE"}'
+    end
+else
+    -- 对于唯一标识符对不上的情况，要去 Redis 检查这个 Key 是否存在
+    -- 从而判断到底是锁不存在还是碰到了别人的锁
+    if
+        redis.call('EXISTS', lockKeyName) == 0
+    then
+        return '{"result": "LOCK_NOT_EXIST"}'
+    else
+        return '{"result" : "LOCK_OWNED_BY_OTHERS"}'
     end
 end
-
--- 如果是别人的锁，直接返回
-return '{"result" : "LOCK_OWNED_BY_OTHERS"}'

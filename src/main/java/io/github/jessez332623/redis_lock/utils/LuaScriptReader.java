@@ -6,12 +6,9 @@ import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,10 +33,6 @@ final public class LuaScriptReader
         LuaScriptOperatorType,
         ConcurrentMap<String, DefaultRedisScript<LuaOperatorResult>>>
         scriptCache = new ConcurrentHashMap<>();
-
-    @Autowired
-    @Qualifier("distributedLockScheduler")
-    private Scheduler scheduler;
 
     /** 从 classpath 中加载脚本。*/
     @Contract("_, _ -> new")
@@ -143,7 +136,6 @@ final public class LuaScriptReader
     read(LuaScriptOperatorType operatorType, String luaScriptName)
     {
         return
-        this.getScriptFromCache(operatorType, luaScriptName)
-            .subscribeOn(this.scheduler);
+        this.getScriptFromCache(operatorType, luaScriptName);
     }
 }

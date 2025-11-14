@@ -114,7 +114,10 @@ app:
   redis-lock:
     # 是否禁用本依赖（默认开启）
     enable: true
-
+    
+    # Redis 操作的统一超时时间（默认为 5 秒）
+    operation-timeout: 5s
+      
     schedulers:
       # 最大线程数（默认 100 线程）
       max-threads: 100
@@ -154,4 +157,4 @@ app:
 
 ## Latest Update
 
-*2025.11.10*
+*2025.11.14*

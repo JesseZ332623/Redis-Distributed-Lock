@@ -8,7 +8,7 @@
 
     ARGV:
         maxSemaphore     最大信号量值
-        semaphoreTimeout 单个信号量的有效期
+        semaphoreTimeout 单个信号量的有效期（毫秒级）
         identifier       信号量唯一标识符（如：a7f40257-f46d-4715-8bc2-b3cef6dd5c93）
 ]]
 
@@ -27,15 +27,16 @@ local maxSemaphore     = tonumber(ARGV[1])
 local semaphoreTimeout = tonumber(ARGV[2])
 local identifier       = ARGV[3]
 
-local currentTimestamp = redis.call('TIME')
+local function getCurrentMillis()
+    local time = redis.call('TIME')
 
--- 获取当前时间戳，使用小数表示（如：1754897298.269707）
-local scoreOfTimestamp
-    = tonumber(currentTimestamp[1]) +               -- 整数部分
-      tonumber(currentTimestamp[2]) / (1000 * 1000) -- 小数部分（微妙级）
+    return tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+end
+
+local scoreOfTimestamp = getCurrentMillis()
 
 -- 删除那些超时的信号量
---（有序集合中分数值为距离当前时间 semaphoreTimeout 秒前的所有成员）
+--（有序集合中分数值为距离当前时间 semaphoreTimeout 毫秒前的所有成员）
 redis.call(
     'ZREMRANGEBYSCORE',
     semaphoreNameKey,
@@ -45,7 +46,7 @@ redis.call(
 
 -- 计算 semaphoreOwnerKey 和 semaphoreNameKey 两个有序集合的交集
 -- 把计算结果保存到 semaphoreOwnerKey 中，
--- 但是要保留 semaphoreOwnerKey 有序集合的计数（'WEIGHTS', 1, 0）
+-- 但是要保留 semaphoreOwnerKey 有序集合的计数 ('WEIGHTS', 1, 0)
 --[[
     这里有一个要点：
     为何要多维护一个 semaphoreOwnerKey 和 semaphoreCounterKey 呢？

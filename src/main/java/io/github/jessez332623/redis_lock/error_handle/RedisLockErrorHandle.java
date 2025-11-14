@@ -1,6 +1,6 @@
 package io.github.jessez332623.redis_lock.error_handle;
 
-import io.github.jessez332623.redis_lock.utils.exception.LuaScriptOperatorFailed;
+import io.github.jessez332623.redis_lock.fair_semaphore.exception.SemaphoreNotFound;import io.github.jessez332623.redis_lock.utils.exception.LuaScriptOperatorFailed;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,8 +36,10 @@ final public class RedisLockErrorHandle
         switch (exception)
         {
             case LuaScriptOperatorFailed luaScriptOperatorFailed ->
-                log.error(
-                    luaScriptOperatorFailed.getMessage(), exception);
+                log.error("{}", luaScriptOperatorFailed.getMessage());
+
+            case SemaphoreNotFound semaphoreNotFound ->
+                log.error("{}", semaphoreNotFound.getMessage());
 
             case RedisConnectionFailureException redisConnectionFailureException ->
                 log.error(
@@ -60,7 +62,8 @@ final public class RedisLockErrorHandle
                 log.error("Spring data access failed!", exception);
             }
 
-            default -> {}
+            default ->
+                log.error("{}", exception.getMessage(), exception);
         }
 
         return Mono.error(exception);

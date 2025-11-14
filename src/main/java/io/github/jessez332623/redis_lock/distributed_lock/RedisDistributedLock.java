@@ -1,12 +1,14 @@
 package io.github.jessez332623.redis_lock.distributed_lock;
 
+import io.github.jessez332623.redis_lock.statistics.StatisticalInstrument;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.function.Function;
 
 /** Redis 分布式锁接口类。*/
-public interface RedisDistributedLock
+public interface RedisDistributedLock extends StatisticalInstrument
 {
     /**
      * 兼容响应式流的 Redis 分布式锁操作，
@@ -16,8 +18,8 @@ public interface RedisDistributedLock
      * @param <T> 在锁作用域中业务逻辑返回的类型
      *
      * @param lockName       锁名
-     * @param acquireTimeout 获取锁的实现期限
-     * @param lockTimeout    锁本身的持有时间期限
+     * @param acquireTimeout 获取锁的实现期限（毫秒级）
+     * @param lockTimeout    锁本身的持有时间期限（毫秒级）
      * @param action         业务逻辑
      *
      * @return 发布业务逻辑执行结果数据的 {@link Mono}
@@ -25,7 +27,7 @@ public interface RedisDistributedLock
     <T> Mono<T>
     withLock(
         String lockName,
-        long acquireTimeout, long lockTimeout,
+        Duration acquireTimeout, Duration lockTimeout,
         Function<String, Mono<T>> action
     );
 }
